@@ -1,0 +1,217 @@
+; разрешение экрана 1280х800 
+; F10 запуск / остановка кача 
+
+Opt("SendKeyDownDelay", 35) ; Глобальная задержка для удержания клавиши в нажатом состоянии 35мс 
+Opt("PixelCoordMode", 2) 
+Func _WinWaitActivate($title,$text,$timeout=0) 
+    WinWait($title,$text,$timeout) 
+    If Not WinActive($title,$text) Then WinActivate($title,$text) 
+    WinWaitActive($title,$text,$timeout) 
+EndFunc 
+
+ToolTip("started, wait aa", 0, 0) 
+$COUNTER=0 
+HotKeySet("{F10}","StartOrStop") ; хоткей старта и остановки если надо более одной копии скрипта запустить используйте другие клавиши 
+HotKeySet("{F11}","Terminate") 
+Global $STOP = True 
+Global $AA_TITLE = "- ArcheAge " ; Название ОКНА клиента. Если используете мульти-окна переименовывайте их по-разному и в точности вписывайте название (лучше скопировать) 
+
+Global $hp_color = 0x 
+
+; В данном варианте скрипт привяжется через HWND к первому найденному окну. 
+_WinWaitActivate($AA_TITLE ,"") 
+Global $hWnd = WinActive($AA_TITLE ,"") 
+sleep(1000) 
+
+ToolTip("aa found!", 0, 0) 
+
+Global $BUFF1_COUNT = TimerInit() 
+Global $BUFF2_COUNT = TimerInit() 
+Global $BUFF3_COUNT = TimerInit() 
+Global $NeedShield = False 
+Global $ShieldTryCount = 0 
+
+Do 
+    Sleep(1000) 
+Until $STOP = False 
+While (1) 
+    Main() 
+WEnd 
+
+; CHECKING HP LEVEL =============================== 
+Func CheckHP($xCoord, $Color) 
+   $y=37 
+   if PixelSearch($xCoord,$y,$xCoord+4,$y+4, $Color, 30, 1, $hWnd) <> 0 Then 
+      Return True 
+   Else 
+      Return False 
+   EndIf 
+EndFunc 
+Func hp90() 
+   Return CheckHP(242, 0x62983B) 
+EndFunc 
+Func hp75() 
+   Return CheckHP(191, 0x528C31) 
+EndFunc 
+Func hp50() 
+   Return CheckHP(135, 0x3E7E25) 
+EndFunc 
+Func hp25() 
+   Return CheckHP(70, 0x30741D) 
+EndFunc 
+; CHECKING MP LEVEL =============================== 
+Func CheckMP($xCoord, $Color) 
+   $y=52 
+   if PixelSearch($xCoord,$y,$xCoord+4,$y+4, $Color, 30, 1, $hWnd) <> 0 Then 
+      Return True 
+   Else 
+      Return False 
+   EndIf 
+EndFunc 
+Func mp90() 
+   Return CheckMP(245, 0x4D76C8) 
+EndFunc 
+Func mp75() 
+   Return CheckMP(191, 0x4064C3) 
+EndFunc 
+Func mp50() 
+   Return CheckMP(135, 0x3351BC) 
+EndFunc 
+Func mp25() 
+   Return CheckMP(70, 0x304DBA) 
+EndFunc 
+; CHECK TARGET ================================== 
+Func HaveTarget() 
+   ; смотрим на полоску маны моба в нескольких местах 
+   $y = 52 
+   $Color = 0x304DBB 
+   $xCoord = 525 
+   $px1 = PixelSearch($xCoord,$y,$xCoord+2,$y+2, $Color, 20, 1, $hWnd) 
+   $xCoord = 573 
+   $px2 = PixelSearch($xCoord,$y,$xCoord+2,$y+2, $Color, 20, 1, $hWnd) 
+
+   if ($px1 <> 0) or ($px2 <> 0) Then 
+      Return True 
+   Else 
+      Return False 
+   EndIf 
+EndFunc 
+;=================================================== 
+Func Main() 
+    If $STOP = False Then 
+
+
+         $df = TimerDiff($BUFF2_COUNT) 
+         If $df > 50000 Then 
+            $NeedShield = True 
+            $ShieldTryCount = 3 
+            $BUFF2_COUNT = TimerInit() 
+         EndIf 
+
+         ; если есть цель 
+         If Not HaveTarget() Then 
+            ; цели нет 
+            ; проверим наше мп 
+            ; если его мало запустим реген 
+            If (Not mp50()) Then 
+               While (Not mp50()) 
+                  ControlSend($hWnd, "", "", "{F1}") ; РЕГЕН МАНЫ, ФЛЕЙТА 
+                  Sleep(1600) 
+                  $BUFF1_COUNT = TimerInit() 
+               WEnd 
+            Else 
+               ; если же мп хватает 
+               ; пошлем поворот чтобы найти цель 
+               Opt("SendKeyDownDelay", 700) 
+               ControlSend($hWnd, "", "", "d") 
+               Opt("SendKeyDownDelay", 35) 
+            EndIf 
+         EndIf 
+
+
+         if $NeedShield Then 
+            Sleep(200) 
+            ControlSend($hWnd, "", "", "{F7}") ; Магический щит 
+            Sleep(50) 
+            $ShieldTryCount = $ShieldTryCount - 1 
+            if ($ShieldTryCount <= 0) Then 
+               $NeedShield = False 
+            EndIf 
+         else 
+            Sleep(50) 
+            ; только если нужно мп! 
+            if (Not mp75()) Then 
+               ControlSend($hWnd, "", "", "{F6}") ; Поглощение энергии чтобы восполнять мп но можно оставлять слот пустым 
+               Sleep(50) 
+            EndIf 
+
+            ControlSend($hWnd, "", "", "{F5}") ; Огненный шар 
+            Sleep(50) 
+
+            ControlSend($hWnd, "", "", "f") ; Поднимаем дроп 
+
+         EndIf 
+
+        Sleep(100) 
+
+        $COUNTER = $COUNTER + 1 
+
+
+        $text = "some" 
+        if hp90() Then 
+            $text="hp >90" 
+        ElseIf hp75() Then 
+            $text="hp >75" 
+        ElseIf hp50() Then 
+            $text="hp >50" 
+        ElseIf hp25() Then 
+            $text="hp >25" 
+        Else 
+            $text="hp LOW" 
+        EndIf 
+        if mp90() Then 
+            $text2="mp >90" 
+        ElseIf mp75() Then 
+            $text2="mp >75" 
+        ElseIf mp50() Then 
+            $text2="mp >50" 
+        ElseIf mp25() Then 
+            $text2="mp >25" 
+        Else 
+            $text2="mp LOW" 
+         EndIf 
+
+         if HaveTarget() Then 
+            $text3 = "YES" 
+         Else 
+            $text3 = "none" 
+         EndIf 
+
+
+        if $STOP = False Then 
+           ToolTip("buff2="& ($df) & " " & $text & " " & $text2 & " target=" & $text3, 0, 0) 
+        EndIf 
+
+    Else 
+        Sleep(100) 
+    EndIf 
+
+EndFunc   ;==>Main 
+
+Func StartOrStop() 
+    If $STOP = True Then 
+
+        ;On START action 
+        ToolTip("STARTED! Press F10 for stop", 0, 0) ; подсказка о состоянии работы скрипта в левом верхнем углу 
+        $STOP = False 
+    Else 
+        ;On STOP action 
+        ;ColorCheck() 
+        ToolTip("STOPPED! Press F10 for start", 0, 0) 
+        $STOP = True 
+    EndIf 
+ EndFunc 
+
+Func Terminate() 
+    Exit 0 
+EndFunc
